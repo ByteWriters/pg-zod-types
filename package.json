@@ -1,0 +1,17 @@
+{
+  "name": "@bytewriters/pg-zod-types",
+  "version": "0.0.1",
+  "description": "Builds zod schemas from a Postgres database",
+  "main": "src/index",
+  "repository": "https://github.com/ByteWriters/pg-zod-types",
+  "author": "J. Ouweneel (ByteWriters V.O.F)",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "tsc --build --clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  }
+}

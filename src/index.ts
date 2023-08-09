@@ -1,0 +1,1 @@
+export { describeDB } from './postgres';

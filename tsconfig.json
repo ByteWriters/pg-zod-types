@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": [ "ESNext" ],
+    "module": "CommonJS",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "rootDir": "."
+  },
+  "include": [ "./src/*" ],
+  "exclude": [ "**/node_modules/" ]
+}
