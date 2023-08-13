@@ -1,33 +1,32 @@
+type KeyType = 'primary' | 'foreign' | null
+
 export interface PgEnum {
   name: string
   values: string[]
 }
 
 export interface PgColumn {
+  schema_name: string
+  table_name: string
   name: string
-  table: PgTable
-  schema: PgSchema
 
   pg_type: string
-  key_type: 'primary' | 'foreign' | null
+  key_type: KeyType
 
-  default: string | null
-  nullable: boolean
+  nullable_read: boolean
+  nullable_write: boolean
 
   enum: PgEnum | null
-  fkey: PgColumn | null // Probably needs lookup after querying
+  fkey: PgColumn | null
 }
 
 export interface PgTable {
   name: string
-  schema: PgSchema
-
   columns: PgColumn[]
 }
 
 export interface PgSchema {
   name: string
-
   enums: PgEnum[]
   tables: PgTable[]
 }
