@@ -1,32 +1,18 @@
 import { Client, ClientConfig } from 'pg';
 
 import * as query from './queries';
-import { PgColumn, PgSchema, PgTable } from './types';
-
-interface PostgresOptions {
-  schemas: string[]
-}
+import { PgTypeResult, PostgresOptions, buildCustomType, filterBy, filterOptions, get, getOrPush } from './util';
+import { ColumnName, EnumName, PgColumn, PgSchema, PgTable, PgTypes, SchemaName, TableName } from './types';
 
 // PG Query return-types
-type SchemaName = string & { _type?: 'Schema' }
-type TableName = string & { _type?: 'Table' }
-type EnumName = string & { _type?: 'Enum' }
-type ColumnName = string & { _type?: 'Column' }
-
 interface PgColumnResult {
   schema_name: SchemaName
   table_name: TableName
   name: ColumnName
   column_default: string | null
   is_nullable: 'YES' | 'NO'
-  data_type: string
   pg_type: string
-}
-
-interface PgEnumResult {
-  name: EnumName
-  schema_name: SchemaName
-  values: string
+  data_type: string
 }
 
 interface PgKeyResult {
@@ -39,25 +25,15 @@ interface PgKeyResult {
   f_column_name: ColumnName
 }
 
-// Returns array-element based on nested property value
-const get = <T = any>(
-  array: T[], value: any, field: keyof T = 'name' as keyof T
-) => Array.isArray(array) ? array.find(s => s[field] === value) : undefined;
-
-// Returns array-element based on nested property value, or pushes supplied item
-const getOrPush = <T = any>(
-  array: T[], item: any, value: any, field: keyof T = 'name' as keyof T
-) => {
-  const idx = array.findIndex(s => s[field] === value);
-  if (idx >= 0) return array[idx];
-
-  array.push(item);
-  return array.at(-1);
+interface PgEnumResult {
+  pg_type: EnumName
+  schema_name: SchemaName
+  values: string
 }
 
 // Initializers for on-the-fly schema & table creation
 const createSchema = (name: string): PgSchema => ({
-  name, enums: [], tables: []
+  name, enums: [], types: [], tables: []
 });
 const createTable = (name: string): PgTable => ({
   name, columns: []
@@ -68,14 +44,14 @@ const createTable = (name: string): PgTable => ({
  * fetches PG internal tables & converts to describing object
  * - schemas
  *   - enums
+ *   - types (user-defined composite types for function output)
  *   - tables
  *     - columns
- *       - enum? -> enum
- *       - fkey? -> column
+ *       - type ('basic', 'enum' or 'foreign' with according info)
  */
 export const describeDB = async (
   clientConfig: ClientConfig,
-  options: PostgresOptions
+  options: PostgresOptions = [{ name: 'public', skipTables: [] }]
 ) => {
   const client = new Client(clientConfig);
   await client.connect();
@@ -84,6 +60,10 @@ export const describeDB = async (
   const { rows: columnRows } = await client.query<PgColumnResult>(query.columns);
   const { rows: enumRows } = await client.query<PgEnumResult>(query.enums);
   const { rows: keyRows } = await client.query<PgKeyResult>(query.keys);
+  const { rows: typeRows } = await client.query<PgTypeResult>(query.types);
+  const { rows: functionRows } = await client.query(query.functions);
+
+  console.log(typeRows[0]);
 
   await client.end();
 
@@ -94,10 +74,10 @@ export const describeDB = async (
   const getSchema = (schema_name: SchemaName) => get(schemas, schema_name);
   const getTable = (
     schema_name: SchemaName, table_name: TableName
-  ) => get(get(schemas, schema_name).tables, table_name);
+  ) => get(get(schemas, schema_name)?.tables, table_name);
   const getColumn = (
     schema_name: SchemaName, table_name: TableName, column_name: ColumnName
-  ) => get(get(get(schemas, schema_name).tables, table_name).columns, column_name);
+  ) => get(get(get(schemas, schema_name)?.tables, table_name).columns, column_name);
 
   const getSchemaColumns = (schema_name: SchemaName) => getSchema(schema_name).tables.reduce(
     (schemaColumns, { columns }) => schemaColumns.concat(columns),
@@ -105,12 +85,15 @@ export const describeDB = async (
   );
 
   const getSchemaPkeys = (schema_name: SchemaName) => getSchemaColumns(schema_name).filter(
-    ({ key_type }) => key_type === 'primary'
+    ({ pkey }) => pkey === true
   );
 
   // Create schema column-by-column (parent table/schema added on-the-fly)
-  for (const { column_default, is_nullable, ...pgColumn } of columnRows) {
+  for (const { column_default, is_nullable, pg_type: _pg_type, data_type, ...pgColumn } of columnRows) {
     const { schema_name, table_name } = pgColumn;
+
+    const is_array = data_type === 'ARRAY';
+    const pg_type = is_array ? _pg_type.replace('_', '') : _pg_type;
 
     const schema: PgSchema = getOrPush(
       schemas,
@@ -126,11 +109,14 @@ export const describeDB = async (
 
     const column: PgColumn = {
       ...pgColumn,
-      key_type: null,
-      nullable_read: is_nullable === 'YES',
-      nullable_write: (is_nullable === 'YES' || !!column_default),
-      enum: null,
-      fkey: null,
+      array: is_array,
+      pkey: false,
+      type: {
+        kind: 'basic',
+        nullable_read: is_nullable === 'YES',
+        nullable_write: (is_nullable === 'YES' || !!column_default),
+        pg_type
+      },
     }
 
     table.columns.push(column);
@@ -138,21 +124,26 @@ export const describeDB = async (
 
   // Post-processing to inject references created during above loop
   for (const schema of schemas) {
-    // Find enums & inject into schema/relevant columns
-    schema.enums = enumRows.filter(
-      ({ schema_name }) => schema_name === schema.name
-    ).map(
-      ({ name, values }) => ({ name, values: values.split(';') })
+    schema.enums = enumRows.filter(filterBy('schema_name', schema.name)).map(
+      ({ pg_type, values }) => ({ pg_type, values: values.split(';') })
     );
 
+    schema.types = typeRows.filter(
+      filterBy('schema_name', schema.name)
+    ).map(buildCustomType(schema));
+
+    // Find enum-type columns & update them according to schema.enums
     for (const _enum of schema.enums) {
       const enumColumns = getSchemaColumns(schema.name).filter(
-        ({ pg_type }) => pg_type === _enum.name
+        ({ type }) => type.pg_type === _enum.pg_type
       );
 
       for (const enumColumn of enumColumns) {
-        enumColumn.enum = _enum;
-        enumColumn.pg_type = 'enum';
+        enumColumn.type = {
+          ...(enumColumn.type as PgTypes['basic']),
+          kind: 'enum',
+          values: _enum.values
+        }
       }
     }
 
@@ -161,28 +152,25 @@ export const describeDB = async (
       schema_name, table_name, column_name,
       constraint_type,
       f_schema_name, f_table_name, f_column_name
-    } of keyRows.filter(
-      ({ schema_name }) => schema_name === schema.name
-    )) {
+    } of keyRows.filter(filterBy('schema_name', schema.name))) {
       const keyColumn = getColumn(schema_name, table_name, column_name);
 
       if (constraint_type === 'PRIMARY KEY' && keyColumn) {
-        keyColumn.key_type = 'primary';
+        keyColumn.pkey = true;
       }
 
       if (constraint_type === 'FOREIGN KEY' && keyColumn) {
-        keyColumn.key_type = 'foreign';
-        const fKeyColumn = getColumn(f_schema_name, f_table_name, f_column_name);
-
-        if (fKeyColumn) {
-          keyColumn.fkey = fKeyColumn;
+        keyColumn.type = {
+          ...(keyColumn.type as PgTypes['basic']),
+          kind: 'foreign',
+          column: getColumn(f_schema_name, f_table_name, f_column_name)
         }
       }
     }
   }
 
   return {
-    schemas,
+    schemas: filterOptions(schemas, options),
     getColumn,
     getTable,
     getSchema,
