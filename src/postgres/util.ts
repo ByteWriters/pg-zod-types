@@ -1,12 +1,10 @@
 import { ColumnName, PgBaseType, PgColumn, PgSchema, SchemaName, TableName, TypeName } from './types';
 
-interface SchemaOptions {
+export interface PgSchemaOptions {
   name: SchemaName
   skipTables?: TableName[]
 }
-
-type MultipleSchemaOptions = SchemaOptions[]
-export type PostgresOptions = SchemaOptions | MultipleSchemaOptions
+export type PgDbOptions = PgSchemaOptions[];
 
 /** Small helpers for lookups */
 
@@ -44,7 +42,7 @@ export const buildCustomType = (schema: PgSchema) => (
 ) => {
   const typeFields = fields.sort(
     (a, b) => a.index > b.index ? 1 : -1
-  ).map(({ name, is_nullable, pg_type: _pg_type, data_type }) => {
+  ).map(({ name, is_nullable, pg_type: _pg_type, data_type, ...fields }) => {
     const is_array = data_type === 'ARRAY';
     const pg_type = is_array ? _pg_type.replace('_', '') : _pg_type;
 
@@ -52,9 +50,9 @@ export const buildCustomType = (schema: PgSchema) => (
     const nullable = is_nullable === 'YES';
 
     const baseFieldType: PgBaseType<{}> = {
+      has_default: false,
       pg_type,
-      nullable_read: nullable,
-      nullable_write: nullable
+      nullable,
     };
 
     if (enumType) return {
@@ -79,11 +77,7 @@ const filterTables = (schema: PgSchema, skipTables: TableName[] = []) => {
   return schema;
 }
 
-export const filterOptions = (schemas: PgSchema[], options: PostgresOptions) => {
-  if (!Array.isArray(options)) return filterTables(
-    schemas.find(s => s.name === options.name), options.skipTables
-  );
-
+export const filterOptions = (schemas: PgSchema[], options: PgSchemaOptions[]) => {
   return options.map(({ name, skipTables }) => filterTables(
     schemas.find(s => s.name === name), skipTables
   ));

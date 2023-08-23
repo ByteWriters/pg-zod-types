@@ -6,9 +6,9 @@ export type TypeName = string & { _type?: 'Type' }
 export type ColumnName = string & { _type?: 'Column' }
 
 export type PgBaseType<T> = T & {
+  has_default: boolean
   pg_type: string       // Contains either a native type (uuid/string/number/...) or 
-  nullable_read: boolean
-  nullable_write: boolean
+  nullable: boolean
 }
 
 export interface PgTypes {
@@ -38,7 +38,7 @@ export interface PgCustomType {
 
 export interface PgEnum {
   pg_type: EnumName
-  values: string[]
+  values: [ string, ...string[] ] // Zod requires at least one value element
 }
 
 /** Schema-level objects */
@@ -56,10 +56,20 @@ export interface PgTable {
   columns: PgColumn[]
 }
 
-/** Top-level object */
 export interface PgSchema {
   name: SchemaName
   enums: PgEnum[]
   types: PgCustomType[]
   tables: PgTable[]
+}
+
+/** Top-level export */
+export interface PgDb {
+  name: string
+  schemas: PgSchema[]
+  getColumn: (schema_name: SchemaName, table_name: TableName, column_name: ColumnName) => PgColumn
+  getTable: (schema_name: SchemaName, table_name: TableName) => PgTable
+  getSchema: (schema_name: SchemaName) => PgSchema
+  getSchemaColumns: (schema_name: SchemaName) => PgColumn[]
+  getSchemaPkeys: (schema_name: SchemaName) => PgColumn[]
 }

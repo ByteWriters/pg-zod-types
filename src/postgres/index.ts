@@ -1,8 +1,8 @@
 import { Client, ClientConfig } from 'pg';
 
 import * as query from './queries';
-import { PgTypeResult, PostgresOptions, buildCustomType, filterBy, filterOptions, get, getOrPush } from './util';
-import { ColumnName, EnumName, PgColumn, PgSchema, PgTable, PgTypes, SchemaName, TableName } from './types';
+import { PgTypeResult, PgDbOptions, buildCustomType, filterBy, filterOptions, get, getOrPush } from './util';
+import { ColumnName, EnumName, PgColumn, PgDb, PgSchema, PgTable, PgTypes, SchemaName, TableName } from './types';
 
 // PG Query return-types
 interface PgColumnResult {
@@ -49,9 +49,9 @@ const createTable = (name: string): PgTable => ({
  *     - columns
  *       - type ('basic', 'enum' or 'foreign' with according info)
  */
-export const describeDB = async (
+export const getPgDB = async (
   clientConfig: ClientConfig,
-  options: PostgresOptions = [{ name: 'public', skipTables: [] }]
+  options: PgDbOptions = [{ name: 'public', skipTables: [] }]
 ) => {
   const client = new Client(clientConfig);
   await client.connect();
@@ -63,20 +63,20 @@ export const describeDB = async (
   const { rows: typeRows } = await client.query<PgTypeResult>(query.types);
   const { rows: functionRows } = await client.query(query.functions);
 
-  console.log(typeRows[0]);
-
   await client.end();
 
   // Declare final output
   const schemas: PgSchema[] = [];
 
   // Exported DB-node getters
-  const getSchema = (schema_name: SchemaName) => get(schemas, schema_name);
-  const getTable = (
-    schema_name: SchemaName, table_name: TableName
+  const getSchema: PgDb['getSchema'] = schema_name => get(schemas, schema_name);
+
+  const getTable: PgDb['getTable'] = (
+    schema_name, table_name
   ) => get(get(schemas, schema_name)?.tables, table_name);
-  const getColumn = (
-    schema_name: SchemaName, table_name: TableName, column_name: ColumnName
+
+  const getColumn: PgDb['getColumn'] = (
+    schema_name, table_name, column_name
   ) => get(get(get(schemas, schema_name)?.tables, table_name).columns, column_name);
 
   const getSchemaColumns = (schema_name: SchemaName) => getSchema(schema_name).tables.reduce(
@@ -113,9 +113,9 @@ export const describeDB = async (
       pkey: false,
       type: {
         kind: 'basic',
-        nullable_read: is_nullable === 'YES',
-        nullable_write: (is_nullable === 'YES' || !!column_default),
-        pg_type
+        has_default: !!column_default,
+        nullable: is_nullable === 'YES',
+        pg_type,
       },
     }
 
@@ -170,11 +170,12 @@ export const describeDB = async (
   }
 
   return {
+    name: clientConfig.database || 'postgres',
     schemas: filterOptions(schemas, options),
     getColumn,
     getTable,
     getSchema,
     getSchemaColumns,
     getSchemaPkeys,
-  }
+  } as PgDb;
 }

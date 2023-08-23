@@ -4,23 +4,88 @@
  * Keys are matched on substring (timestamptz -> timestamp, int4 -> int)
  */
 
-import z from 'zod';
+import z, { ZodType } from 'zod';
+import { PgColumn } from '../postgres/types';
+import { PgOperation } from './types';
 
-export const pg2zodType = {
-  uuid: z.string().uuid(),
-  serial: z.number().int(),
+export const pgColumn2zod = (column: PgColumn, operation: PgOperation) => {
+  let baseType: ZodType = null;
 
-  bool: z.boolean(),
+  switch(column.type.pg_type) {
+    case 'uuid': baseType = z.string().uuid(); break;
+    case 'serial': baseType = z.number().int().min(1); break;
 
-  double: z.number(),
-  int: z.number().int(),
+    case 'bool': baseType = z.boolean(); break;
 
-  text: z.string(),
-  timestamp: z.string().datetime(),
+    case 'double': baseType = z.number(); break;
+    case 'int': baseType = z.number().int(); break;
 
-  json: z.any(),
+    case 'text': baseType = z.string(); break;
+    case 'timestamp': baseType = z.string().datetime(); break;
 
-  // enum: z.nativeEnum(),  ACCEPTS ENUM AS INPUT
+    case 'json': baseType = z.any(); break;
 
-  default: z.string()
+    case 'enum': {
+      console.log('WTF', column);
+      baseType = z.any(); break;
+    }
+
+    default: {
+      switch(column.type.kind) {
+        case 'enum': baseType = z.enum(column.type.values); break;
+        default: baseType = z.any(); break;
+      }
+    }
+  }
+
+  const { array, pkey, type: { has_default, nullable } } = column;
+
+  const zodBaseType = array ? z.array(baseType) : baseType;
+  const zodBase = nullable ? zodBaseType.nullable() : zodBaseType;
+
+  switch(operation) {
+    case 'delete': return pkey ? zodBase : zodBase.optional();
+    case 'insert': return (nullable || has_default) ? zodBase.optional() : zodBase;
+    case 'update': return pkey ? zodBase : zodBase.optional();
+    default: return zodBase.optional();
+  }
 }
+
+export const pgColumn2zodString = (column: PgColumn, operation: PgOperation) => {
+  let baseType = '';
+
+  switch(column.type.pg_type) {
+    case 'uuid': baseType = 'z.string().uuid()'; break;
+    case 'serial': baseType = 'z.number().int().min(1)'; break;
+
+    case 'bool': baseType = 'z.boolean()'; break;
+
+    case 'double': baseType = 'z.number()'; break;
+    case 'int': baseType = 'z.number().int()'; break;
+
+    case 'text': baseType = 'z.string()'; break;
+    case 'timestamp': baseType = 'z.string().datetime()'; break;
+
+    case 'json': baseType = 'z.any()'; break;
+
+    default: {
+      switch(column.type.kind) {
+        case 'enum': baseType = `z.enum([${column.type.values.map(v => `'${v}'`).join(', ')}])`; break; // @TODO NativeEnum - inject zod-stuff into schema.enums first
+        default: baseType = 'z.any()'; break;
+      }
+    }
+  }
+
+  const { array, pkey, type: { has_default, nullable } } = column;
+
+  const zodBaseType = array ? `z.array(${baseType})` : baseType;
+  const zodBase = nullable ? `${zodBaseType}.nullable()` : zodBaseType;
+
+  switch(operation) {
+    case 'delete': return pkey ? zodBase : `${zodBase}.optional()`;
+    case 'insert': return (nullable || has_default) ? `${zodBase}.optional()` : zodBase;
+    case 'update': return pkey ? zodBase : `${zodBase}.optional()`;
+    default: return `${zodBase}.optional()`;
+  }
+}
+
