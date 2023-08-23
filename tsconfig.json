@@ -6,6 +6,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true,
+    "downlevelIteration": true,
     "rootDir": "."
   },
   "include": [ "./src/**/*" ],

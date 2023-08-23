@@ -4,7 +4,6 @@ export interface PgSchemaOptions {
   name: SchemaName
   skipTables?: TableName[]
 }
-export type PgDbOptions = PgSchemaOptions[];
 
 /** Small helpers for lookups */
 

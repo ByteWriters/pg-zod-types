@@ -1,7 +1,7 @@
 import { Client, ClientConfig } from 'pg';
 
 import * as query from './queries';
-import { PgTypeResult, PgDbOptions, buildCustomType, filterBy, filterOptions, get, getOrPush } from './util';
+import { PgTypeResult, buildCustomType, filterBy, filterOptions, get, getOrPush, PgSchemaOptions } from './util';
 import { ColumnName, EnumName, PgColumn, PgDb, PgSchema, PgTable, PgTypes, SchemaName, TableName } from './types';
 
 // PG Query return-types
@@ -51,7 +51,7 @@ const createTable = (name: string): PgTable => ({
  */
 export const getPgDB = async (
   clientConfig: ClientConfig,
-  options: PgDbOptions = [{ name: 'public', skipTables: [] }]
+  options: PgSchemaOptions[] = [{ name: 'public', skipTables: [] }]
 ) => {
   const client = new Client(clientConfig);
   await client.connect();
