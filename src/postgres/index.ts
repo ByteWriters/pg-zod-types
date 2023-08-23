@@ -125,7 +125,7 @@ export const getPgDB = async (
   // Post-processing to inject references created during above loop
   for (const schema of schemas) {
     schema.enums = enumRows.filter(filterBy('schema_name', schema.name)).map(
-      ({ pg_type, values }) => ({ pg_type, values: values.split(';') })
+      ({ pg_type, values }) => ({ pg_type, values: values.split(';') as [ string, ...string[] ] })
     );
 
     schema.types = typeRows.filter(
