@@ -6,7 +6,7 @@
   "repository": "https://github.com/ByteWriters/pg-zod-types",
   "author": "J. Ouweneel (ByteWriters V.O.F)",
   "license": "MIT",
-  "private": false,
+  "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "tsc --build --clean"
