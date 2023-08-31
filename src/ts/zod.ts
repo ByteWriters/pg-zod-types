@@ -1,47 +1,55 @@
 import { PgColumn } from '../postgres/types';
 import { pascalize } from '../util';
+import { PgOperation } from './types';
+
+const pgTypeMap = {
+  uuid: 'z.string().uuid()',
+  serial: 'z.number().int().min(1)',
+
+  bool: 'z.boolean()',
+
+  double: 'z.number()',
+  int: 'z.number().int()',
+
+  text: 'z.string()',
+  timestamp: 'z.string().datetime()',
+
+  json: 'z.any()',
+}
 
 export const pgColumn2zodString = (
   column: PgColumn,
-  getTableName = pascalize,
+  operation: PgOperation = 'select',
+  override: string = '',
   getEnumName = pascalize,
 ) => {
-  let baseType = '';
+  if (override && override.indexOf('z.') === 0) return override;
 
-  switch(column.type.pg_type) {
-    case 'uuid': baseType = 'z.string().uuid()'; break;
-    case 'serial': baseType = 'z.number().int().min(1)'; break;
-
-    case 'bool': baseType = 'z.boolean()'; break;
-
-    case 'double': baseType = 'z.number()'; break;
-    case 'int': baseType = 'z.number().int()'; break;
-
-    case 'text': baseType = 'z.string()'; break;
-    case 'timestamp': baseType = 'z.string().datetime()'; break;
-
-    case 'json': baseType = 'z.any()'; break;
-
-    default: {
-      switch(column.type.kind) {
-        case 'enum': baseType = `z.nativeEnum(${getEnumName(column.type.pg_type)})`; break;
-        default: baseType = 'z.any()'; break;
-      }
-    }
+  // Any-fallback unless checks below find a mapped type
+  let baseType = 'z.any()';
+  
+  if (column.type.kind === 'enum') {
+    baseType = `z.nativeEnum(${getEnumName(column.type.pg_type)})`;
   }
 
+  const [ _, mappedType ] = Object.entries(pgTypeMap).find(
+    ([ key ]) => column.type.pg_type.indexOf(key) === 0
+  ) || [];
+
+  if (mappedType) baseType = mappedType;
+
+  // Add modifiers based on nullability/default & operation type
   const { array, type: { has_default, nullable } } = column;
 
   const zodBaseType = array ? `z.array(${baseType})` : baseType;
-  const zodBase = nullable ? `${zodBaseType}.nullable()` : zodBaseType;
+  const zodBase = (nullable ? `${zodBaseType}.nullable()` : zodBaseType) + override;
 
-  // return (nullable || has_default) ? `${zodBase}.optional()` : zodBase;
+  const notOptional = (
+    (operation === 'insert' && !has_default) ||
+    ((operation === 'delete' || operation === 'update') && column.pkey)
+  );
+
+  if (notOptional) return zodBase;
+
   return `${zodBase}.optional()`;
-
-  // switch(operation) {
-  //   case 'delete': return pkey ? zodBase : `${zodBase}.optional()`;
-  //   case 'insert': return (nullable || has_default) ? `${zodBase}.optional()` : zodBase;
-  //   case 'update': return pkey ? zodBase : `${zodBase}.optional()`;
-  //   default: return `${zodBase}.optional()`;
-  // }
 }

@@ -20,11 +20,13 @@ const defaultTypeBuilder = (
   getEnumName = pascalize,
   getTableName = pascalize,
   getTypeName = pascalize,
+  override?: string
 ) => {
   const typeFields = fields.map(f => {
     const fieldDef = pgColumn2zodString(
       { ...f, pkey: false },
-      getTableName,
+      'select',
+      override,
       getEnumName
     );
     return `\t${f.name}: ${fieldDef}${f.array ? '[]' : ''},`;
@@ -35,10 +37,11 @@ const defaultTypeBuilder = (
 
 const defaultColumnBuilder = (
   getTableName = pascalize,
-  getEnumName = pascalize
+  getEnumName = pascalize,
+  override?: string
 ) => (
   column: PgColumn
-) => `\t${column.name}: ${pgColumn2zodString(column, getTableName, getEnumName)},`
+) => `\t${column.name}: ${pgColumn2zodString(column, 'select', override, getEnumName)},`
 
 const defaultTableBuilder = (
   { name, columns }: PgTable,
