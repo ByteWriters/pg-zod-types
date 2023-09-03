@@ -1,19 +1,22 @@
 // Typed name-fields (both query results & Schema definitions)
 export type SchemaName = string & { _type?: 'Schema' }
-export type TableName = string & { _type?: 'Table' }
 export type EnumName = string & { _type?: 'Enum' }
+export type FunctionName = string & { _type?: 'Function' }
 export type TypeName = string & { _type?: 'Type' }
+export type TableName = string & { _type?: 'Table' }
 export type ColumnName = string & { _type?: 'Column' }
 
 export type PgBaseType<T> = T & {
-  has_default: boolean
-  pg_type: string       // Contains either a native type (uuid/string/number/...) or 
-  nullable: boolean
+  pg_type: string
+  array?: boolean
+  has_default?: boolean
+  nullable?: boolean
 }
 
 export interface PgTypes {
   basic: PgBaseType<{}>
-  enum: PgBaseType<PgEnum>
+  custom: PgBaseType<Omit<PgCustomType,'name'|'pg_type'>>
+  enum: PgBaseType<Omit<PgEnum,'name'>>
   foreign: PgBaseType<{
     column: PgColumn
   }>
@@ -23,31 +26,32 @@ export type PgType = {
   [Type in keyof PgTypes]: { kind: Type } & PgTypes[Type]
 }[keyof PgTypes]
 
-/** Table-level objects */
-export interface PgColumn {
+export interface PgField {
   name: ColumnName
   type: PgType
-  array: boolean
-  pkey: boolean
+}
+
+/** Table-level objects */
+export interface PgColumn extends PgField {
+  pkey?: boolean
 }
 
 export interface PgCustomType {
-  pg_type: TypeName
-  fields: Omit<PgColumn, 'pkey'>[]
+  name: TypeName   // == pg_type; used for skip-lookup
+  pg_type: string
+  fields: PgField[]
 }
 
 export interface PgEnum {
-  pg_type: EnumName
+  name: EnumName   // == pg_type; used for skip-lookup
+  pg_type: string
   values: [ string, ...string[] ] // Zod requires at least one value element
 }
 
 /** Schema-level objects */
 export interface PgFunction {
   name: string
-  arguments: {
-    name: string
-    type: PgType
-  }[]
+  args: PgField[]
   returns: PgType
 }
 
@@ -56,20 +60,22 @@ export interface PgTable {
   columns: PgColumn[]
 }
 
+// Top-level postgres options & output
+export interface PgSchemaOptions {
+  name: SchemaName
+  skip?: {
+    enums?: EnumName[]
+    functions?: FunctionName[]
+    tables?: TableName[]
+    types?: TypeName[]
+  }
+  outFile?: string
+}
+
 export interface PgSchema {
   name: SchemaName
   enums: PgEnum[]
+  functions: PgFunction[]
   types: PgCustomType[]
   tables: PgTable[]
-}
-
-/** Top-level export */
-export interface PgDb {
-  name: string
-  schemas: PgSchema[]
-  getColumn: (schema_name: SchemaName, table_name: TableName, column_name: ColumnName) => PgColumn
-  getTable: (schema_name: SchemaName, table_name: TableName) => PgTable
-  getSchema: (schema_name: SchemaName) => PgSchema
-  getSchemaColumns: (schema_name: SchemaName) => PgColumn[]
-  getSchemaPkeys: (schema_name: SchemaName) => PgColumn[]
 }

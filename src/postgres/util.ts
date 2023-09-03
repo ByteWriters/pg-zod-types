@@ -1,11 +1,5 @@
-import { ColumnName, PgBaseType, PgColumn, PgSchema, SchemaName, TableName, TypeName } from './types';
-
-export interface PgSchemaOptions {
-  name: SchemaName
-  skipTables?: TableName[]
-}
-
-/** Small helpers for lookups */
+import { PgFunctionResult, PgTypeResult } from './queries';
+import { PgCustomType, PgFunction, PgSchema, PgSchemaOptions, PgType } from './types';
 
 // Returns array-element based on nested property value
 export const get = <T = any>(
@@ -28,56 +22,79 @@ export const filterBy = <T = any>(
   by: keyof T, value: T[keyof T]
 ) => (input: T) => input[by] === value;
 
-/** Query-result for user-defined composite types */
-export interface PgTypeResult {
-  pg_type: TypeName
-  schema_name: SchemaName
-  fields: { index: number, name: ColumnName, pg_type: string, data_type: string, is_nullable: 'YES' | 'NO' }[]
+// Lookup existing enum or customType, return basic field otherwise
+const getPgType = (
+  schema: PgSchema, { pg_type, ...info }: { pg_type: string } & Record<string,any>
+): PgType => {
+  const enumType = schema.enums.find(e => e.pg_type === pg_type);
+  if (enumType) return { kind: 'enum', ...info, ...enumType };
+
+  const customType = schema.types.find(t => t.pg_type === pg_type);
+  if (customType) return { kind: 'custom', ...info, ...customType };
+
+  return { kind: 'basic', pg_type, ...info };
 }
+
 
 /** User-defined composite types builder (queried PgTypeResult -> PgSchema['types']) */
 export const buildCustomType = (schema: PgSchema) => (
   { pg_type, fields }: PgTypeResult
-) => {
+): PgCustomType => {
   const typeFields = fields.sort(
     (a, b) => a.index > b.index ? 1 : -1
-  ).map(({ name, is_nullable, pg_type: _pg_type, data_type, ...fields }) => {
+  ).map(({ name, is_nullable, pg_type: _pg_type, data_type }) => {
     const is_array = data_type === 'ARRAY';
-    const pg_type = is_array ? _pg_type.replace('_', '') : _pg_type;
-
-    const enumType = schema.enums.find(e => e.pg_type === pg_type);
     const nullable = is_nullable === 'YES';
 
-    const baseFieldType: PgBaseType<{}> = {
-      has_default: false,
-      pg_type,
-      nullable,
-    };
+    const pg_type = is_array ? _pg_type.replace('_', '') : _pg_type;
+    const type = getPgType(schema, { pg_type, nullable, array: is_array });
 
-    if (enumType) return {
-      name, type: { kind: 'enum', values: enumType.values, ...baseFieldType }
-    } as Omit<PgColumn, 'pkey'>;
-
-    return {
-      name, type: { kind: 'basic', ...baseFieldType }
-    } as Omit<PgColumn, 'pkey'>;;
+    return { name, type };
   });
 
   return {
+    name: pg_type,
     pg_type,
     fields: typeFields
   };
 };
 
-/** Apply options (schema -> whitelist, skipTables -> blacklist) */
-const filterTables = (schema: PgSchema, skipTables: TableName[] = []) => {
-  const filteredTables = schema.tables.filter(t => !skipTables.includes(t.name));
-  schema.tables = filteredTables;
-  return schema;
+/**
+ * Custom postgres-defined function definition builder
+ * @TODO Current query doesn't provide a lot of type info
+ **/
+export const buildFunction = (schema: PgSchema) => (
+  { name, args: args_string, return_type }: PgFunctionResult
+): PgFunction => {
+  const args: PgFunction['args'] = args_string.split(', ').map(arg_string => {
+    const [ arg_name, pg_type ] = arg_string.split(' ');
+    const type = getPgType(schema, { pg_type });
+
+    return { name: arg_name, type };
+  });
+
+  const returns = getPgType(schema, { pg_type: return_type });
+
+  return {
+    name,
+    args,
+    returns
+  };
 }
 
-export const filterOptions = (schemas: PgSchema[], options: PgSchemaOptions[]) => {
-  return options.map(({ name, skipTables }) => filterTables(
-    schemas.find(s => s.name === name), skipTables
-  ));
-}
+/** Applies skip-options  */
+export const filterOptions = (
+  schemas: PgSchema[], options: PgSchemaOptions[]
+) => options.map(({ name, skip }) => {
+  const schema = schemas.find(s => s.name === name);
+
+  if (!schema) throw new Error(`Schema "${name}" not found in DB`);
+  if (!skip || !Object.keys(skip).length) return schema;
+  
+  return Object.entries(skip).reduce((output, [ type, skipList ]) => {
+    const unfiltered = [...(schema[type])];
+    const filtered = unfiltered.filter(entry => !skipList.includes(entry.name));
+    return { ...output, [type]: filtered };
+  }, schema);
+});
+

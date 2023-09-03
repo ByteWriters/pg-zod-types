@@ -1,25 +1,42 @@
 import { ClientConfig } from 'pg';
 
 import { getPgDB } from './postgres';
-import { PgSchemaOptions } from './postgres/util';
-import { pgSchema2tsFile } from './ts';
-import { TsOptions } from './ts/types';
+import { PgSchema, PgSchemaOptions } from './postgres/types';
+import { TsBuilderOptions } from './types';
+import { buildSchema } from './buildSchema';
+import { builders } from './builders';
+import { writeFileSync } from 'fs';
 
 export { getPgDB } from './postgres';
 
-const defaultTemplate = (tsOutput: string) => `import z from 'zod'\n\n${tsOutput}`;
+export type DbBuilderOptions = PgSchemaOptions & TsBuilderOptions
 
-export const pg2ts = async (
-  clientConfig: ClientConfig,
-  pgOptions: PgSchemaOptions | PgSchemaOptions[] = { name: 'public', skipTables: [] },
-  tsOptions: TsOptions = {}
+export const PgSchema2String = (
+  schema: PgSchema,
+  options: DbBuilderOptions = {} as DbBuilderOptions
 ) => {
-  const db = await getPgDB(clientConfig, Array.isArray(pgOptions) ? pgOptions : [ pgOptions ]);
-  const template = tsOptions.template || defaultTemplate;
+  const builder = options.builder || builders.zod;
 
-  if (Array.isArray(pgOptions)) return db.schemas.map(
-    schema => template(pgSchema2tsFile(schema, tsOptions))
+  const template = options.template || builder.defaultTemplate || (s => s);
+  const output = template(buildSchema(schema, builder, options), schema);
+
+  if (options.outFile) writeFileSync(options.outFile, output);
+
+  return output;
+}
+
+export const PgDb2String = async (
+  clientConfig: ClientConfig,
+  options: DbBuilderOptions | DbBuilderOptions[]
+) => {
+  const schemas = await getPgDB(
+    clientConfig,
+    Array.isArray(options) ? options : [ options ]
   );
 
-  return template(pgSchema2tsFile(db.schemas[0], tsOptions));
+  if (Array.isArray(options)) return schemas.map(
+    (s, i) => PgSchema2String(s, options[i])
+  );
+
+  return PgSchema2String(schemas[0], options);
 }
