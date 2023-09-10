@@ -38,7 +38,7 @@ const pgColumn2zodString = (
   }
 
   const [ _, mappedType ] = Object.entries(pgTypeMap).find(
-    ([ key ]) => column.type.pg_type.indexOf(key) === 0
+    ([ key ]) => column.type.pg_type?.indexOf(key) === 0
   ) || [];
 
   if (mappedType) baseType = mappedType;
@@ -102,11 +102,13 @@ const functionBuilder = (
     arg => `\t\t\t${arg.name}: ${pgColumn2zodString(arg, 'insert', namers, schema)},`
   ).join('\n');
 
+  const argStr = argTypes.length ? `z.object({\n${argTypes}\n\t\t})` : 'z.null()';
+
   const returnType = pgColumn2zodString(
     { name: '', type: returns }, 'insert', namers, schema
   );
 
-  return `\t'${name}': {\n\t\targs: z.object({\n${argTypes}\n\t\t}),\n\t\treturns: ${returnType}\n\t},`;
+  return `\t'${name}': {\n\t\targs: ${argStr},\n\t\treturns: ${returnType}\n\t},`;
 }
 
 const functionsBuilder: PgTsBuilder['pgFunctions'] = (

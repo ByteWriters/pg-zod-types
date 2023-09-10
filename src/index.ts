@@ -1,11 +1,11 @@
+import { writeFileSync } from 'fs';
 import { ClientConfig } from 'pg';
 
+import { builders } from './builders';
+import { buildSchema } from './buildSchema';
 import { getPgDB } from './postgres';
 import { PgSchema, PgSchemaOptions } from './postgres/types';
 import { TsBuilderOptions } from './types';
-import { buildSchema } from './buildSchema';
-import { builders } from './builders';
-import { writeFileSync } from 'fs';
 
 export { getPgDB } from './postgres';
 

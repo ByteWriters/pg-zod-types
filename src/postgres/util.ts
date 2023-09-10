@@ -66,10 +66,11 @@ export const buildCustomType = (schema: PgSchema) => (
 export const buildFunction = (schema: PgSchema) => (
   { name, args: args_string, return_type }: PgFunctionResult
 ): PgFunction => {
-  const args: PgFunction['args'] = args_string.split(', ').map(arg_string => {
+  const args: PgFunction['args'] = args_string.split(', ').filter(
+    a => Boolean(a)
+  ).map(arg_string => {
     const [ arg_name, pg_type ] = arg_string.split(' ');
     const type = getPgType(schema, { pg_type });
-
     return { name: arg_name, type };
   });
 
