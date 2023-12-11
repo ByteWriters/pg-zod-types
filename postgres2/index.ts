@@ -5,15 +5,15 @@ import { SchemaName } from './types';
 import { PgSchema } from './schema';
 
 interface PgOptions {
-  name: SchemaName
+	name: SchemaName
 }
 
 export async function getSchema(
-  config: ClientConfig,
-  options: PgOptions = { name: 'public' },
+	config: ClientConfig,
+	options: PgOptions = { name: 'public' },
 ) {
-  const rawSchema = await queryPgSchema(config, options.name);
-  const schema = new PgSchema(rawSchema);
+	const rawSchema = await queryPgSchema(config, options.name);
+	const schema = new PgSchema(rawSchema);
 
-  return schema;
+	return schema;
 }

@@ -2,21 +2,21 @@ import { Client, ClientConfig } from 'pg';
 
 import { ColumnName, EnumName, FunctionName, SchemaName, TableName, CustomTypeName } from './types';
 
-export interface PgFieldResult  {
-  index?: number,
-  name: string,
-  pg_type: string,
-  data_type: string,
-  is_nullable: 'YES' | 'NO'
+export interface PgFieldResult {
+	index?: number,
+	name: string,
+	pg_type: string,
+	data_type: string,
+	is_nullable: 'YES' | 'NO'
 }
 
 export interface PgColumnResult {
-  name: ColumnName
-  table_name: TableName
-  column_default: string | null
-  is_nullable: 'YES' | 'NO'
-  pg_type: string
-  data_type: string
+	name: ColumnName
+	table_name: TableName
+	column_default: string | null
+	is_nullable: 'YES' | 'NO'
+	pg_type: string
+	data_type: string
 }
 
 const q_columns = `
@@ -27,9 +27,9 @@ SELECT table_name, column_name name, column_default, is_nullable, udt_name as pg
 `;
 
 export interface PgEnumResult {
-  name: EnumName
-  pg_type: string
-  values: string
+	name: EnumName
+	pg_type: string
+	values: string
 }
 
 const q_enums = `
@@ -43,12 +43,12 @@ SELECT t.typname as "name", t.typname as "pg_type", string_agg(e.enumlabel, ';')
 
 
 export interface PgPrimaryForeignKeyResult {
-  table_name: TableName
-  column_name: ColumnName
-  constraint_type: 'PRIMARY KEY' | 'FOREIGN KEY'
-  f_schema_name: SchemaName
-  f_table_name: TableName
-  f_column_name: ColumnName
+	table_name: TableName
+	column_name: ColumnName
+	constraint_type: 'PRIMARY KEY' | 'FOREIGN KEY'
+	f_schema_name: SchemaName
+	f_table_name: TableName
+	f_column_name: ColumnName
 }
 
 const q_pkeys_fkeys = `
@@ -73,9 +73,9 @@ const q_pkeys_fkeys = `
 
 
 export interface PgCustomTypeResult {
-  name: CustomTypeName
-  pg_type: string
-  fields: PgFieldResult[]
+	name: CustomTypeName
+	pg_type: string
+	fields: PgFieldResult[]
 }
 
 const q_custom_types = `
@@ -92,9 +92,9 @@ SELECT udt_name "name", udt_name "pg_type", array_agg(json_build_object(
 `;
 
 export interface PgFunctionResult {
-  name: FunctionName
-  args: string
-  return_type: string
+	name: FunctionName
+	args: string
+	return_type: string
 }
 
 const q_functions = `
@@ -110,46 +110,46 @@ const q_functions = `
 `;
 
 export interface RawPgSchema {
-  name: SchemaName
-  columns: PgColumnResult[]
-  enums: PgEnumResult[]
-  functions: PgFunctionResult[]
-  pkeysFkeys: PgPrimaryForeignKeyResult[]
-  types: PgCustomTypeResult[]
-  tableNames: TableName[]
+	name: SchemaName
+	columns: PgColumnResult[]
+	enums: PgEnumResult[]
+	functions: PgFunctionResult[]
+	pkeysFkeys: PgPrimaryForeignKeyResult[]
+	types: PgCustomTypeResult[]
+	tableNames: TableName[]
 }
 
 export async function queryPgSchema(
-  config: ClientConfig,
-  schema_name: string,
+	config: ClientConfig,
+	schema_name: string,
 ): Promise<RawPgSchema> {
-  const client = new Client(config);
-  await client.connect();
+	const client = new Client(config);
+	await client.connect();
 
-  // Build output per-schema
-  const runQuery = <ReturnType>(text: string) => client.query<ReturnType>(text, [ schema_name ]);
+	// Build output per-schema
+	const runQuery = <ReturnType>(text: string) => client.query<ReturnType>(text, [schema_name]);
 
-  // Collect everything in one go for faster querying & have all info in advance (fkey-relations)
-  const { rows: columns } = await runQuery<PgColumnResult>(q_columns);
-  const { rows: enums } = await runQuery<PgEnumResult>(q_enums);
-  const { rows: functions } = await runQuery<PgFunctionResult>(q_functions);
-  const { rows: pkeysFkeys } = await runQuery<PgPrimaryForeignKeyResult>(q_pkeys_fkeys);
-  const { rows: types } = await runQuery<PgCustomTypeResult>(q_custom_types);
+	// Collect everything in one go for faster querying & have all info in advance (fkey-relations)
+	const { rows: columns } = await runQuery<PgColumnResult>(q_columns);
+	const { rows: enums } = await runQuery<PgEnumResult>(q_enums);
+	const { rows: functions } = await runQuery<PgFunctionResult>(q_functions);
+	const { rows: pkeysFkeys } = await runQuery<PgPrimaryForeignKeyResult>(q_pkeys_fkeys);
+	const { rows: types } = await runQuery<PgCustomTypeResult>(q_custom_types);
 
-  await client.end();
+	await client.end();
 
-  const tableNames = columns.reduce((list, { table_name }) => {
-    if (list.indexOf(table_name) >= 0) return list;
-    return [ ...list, table_name ];
-  }, [] as TableName[]).sort();
+	const tableNames = columns.reduce((list, { table_name }) => {
+		if (list.indexOf(table_name) >= 0) return list;
+		return [...list, table_name];
+	}, [] as TableName[]).sort();
 
-  return {
-    name: schema_name,
-    columns,
-    enums,
-    functions,
-    pkeysFkeys,
-    types,
-    tableNames,
-  };
+	return {
+		name: schema_name,
+		columns,
+		enums,
+		functions,
+		pkeysFkeys,
+		types,
+		tableNames,
+	};
 }
