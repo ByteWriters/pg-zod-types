@@ -18,7 +18,7 @@ services:
     environment:
       POSTGRES_HOST: postgres
     volumes:
-      - ./nodemon.json:/opt/app/node.json
+      - ./nodemon.json:/opt/app/nodemon.json
       - ./package.json:/opt/app/package.json
       - ./tsconfig.json:/opt/app/tsconfig.json
       - ./yarn.lock:/opt/app/yarn.lock
