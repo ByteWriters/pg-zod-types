@@ -9,10 +9,13 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "tsc --build --clean"
+    "clean": "tsc --build --clean",
+    "start:dev": "nodemon --exec node -r ts-node/register test/index.ts"
   },
   "devDependencies": {
-    "@types/node": "^20.5.9",
+    "@types/node": "^20.9.0",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.2.2"
   }
 }
