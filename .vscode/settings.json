@@ -1,0 +1,16 @@
+{
+  "editor.tabSize": 2,
+  "editor.insertSpaces": false,
+  "editor.detectIndentation": false,
+  
+  "nodejs-testing.extensions": [
+    {
+      "extensions": [ "ts" ],
+      "parameters": [ "-r", "ts-node/register" ]
+    }
+  ],
+
+  "files.exclude": {
+    "node_modules": true,
+  }
+}

@@ -104,4 +104,4 @@ export const functions = `
     AND n.nspname != 'information_schema'
     AND p.probin is null
     AND (pg_get_function_result(p.oid) != 'trigger')
-`
+`;

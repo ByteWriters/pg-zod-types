@@ -9,6 +9,7 @@
     "downlevelIteration": true,
     "rootDir": "."
   },
-  "include": [ "./src/**/*" ],
-  "exclude": [ "node_modules/" ]
+  "include": [ "./src/**/*", "./postgres2/*" ],
+  "exclude": [ "node_modules/" ],
+  "ts-node": { "swc": true }
 }

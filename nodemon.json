@@ -1,0 +1,9 @@
+{
+  "ext": "ts,sql",
+  "restartable": false,
+  "watch": [
+    "src",
+    "test",
+    "postgres2"
+  ]
+}

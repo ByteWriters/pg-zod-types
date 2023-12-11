@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  postgres:
+    ports:
+      - 127.0.0.1:5432:5432
+  
+  typescript:
+    ports:
+      - 127.0.0.1:9229:9229
+    entrypoint: yarn start:dev

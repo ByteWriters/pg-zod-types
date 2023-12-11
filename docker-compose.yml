@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  postgres:
+    container_name: test-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./docker-compose.test.sql:/docker-entrypoint-initdb.d/init.sql
+    tmpfs:
+      - /run
+      - /tmp
+
+  typescript:
+    container_name: test-typescript
+    image: node:20-alpine
+    environment:
+      POSTGRES_HOST: postgres
+    volumes:
+      - ./nodemon.json:/opt/app/node.json
+      - ./package.json:/opt/app/package.json
+      - ./tsconfig.json:/opt/app/tsconfig.json
+      - ./yarn.lock:/opt/app/yarn.lock
+      - ./index.ts:/opt/app/index.ts
+      - ./src:/opt/app/src
+      - ./postgres2:/opt/app/postgres2
+      - ./test:/opt/app/test
+      - ./node_modules:/opt/app/node_modules
+    working_dir: /opt/app
+    entrypoint: tail -f /dev/null
+    depends_on:
+      - postgres
