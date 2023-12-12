@@ -116,7 +116,7 @@ export interface RawPgSchema {
 	functions: PgFunctionResult[]
 	pkeysFkeys: PgPrimaryForeignKeyResult[]
 	types: PgCustomTypeResult[]
-	tableNames: TableName[]
+	tableNames: { name: TableName }[]
 }
 
 export async function queryPgSchema(
@@ -139,9 +139,9 @@ export async function queryPgSchema(
 	await client.end();
 
 	const tableNames = columns.reduce((list, { table_name }) => {
-		if (list.indexOf(table_name) >= 0) return list;
-		return [...list, table_name];
-	}, [] as TableName[]).sort();
+		if (list.some(({ name }) => name === table_name)) return list;
+		return [...list, { name: table_name }];
+	}, [] as { name: TableName }[]).sort();
 
 	return {
 		name: schema_name,

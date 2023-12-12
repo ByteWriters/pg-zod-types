@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "tsc --build --clean",
-    "start:dev": "yarn && nodemon --exec node -r ts-node/register --inspect-brk=0.0.0.0:9229 index.ts",
+    "start:dev": "yarn && nodemon --inspect-brk=0.0.0.0:9229 index.ts",
 		"test": "node --test -r ts-node/register ./test/*.ts",
 		"test:ci": "docker compose -f docker-compose.yml up -d && docker compose exec typescript yarn --pure-lockfile > /dev/null && docker compose exec typescript yarn test && docker compose down && docker system prune --volumes -f > /dev/null && docker network prune -f > /dev/null"
   },

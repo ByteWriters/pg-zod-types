@@ -1,6 +1,7 @@
 {
   "ext": "ts,sql",
   "restartable": false,
+	"exec": "node -r ts-node/register",
   "watch": [
     "src",
     "test",

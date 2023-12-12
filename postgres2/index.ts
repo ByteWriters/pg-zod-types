@@ -1,19 +1,14 @@
 import { ClientConfig } from 'pg';
 
 import { queryPgSchema } from './queries';
-import { SchemaName } from './types';
-import { PgSchema } from './schema';
-
-interface PgOptions {
-	name: SchemaName
-}
+import { PgSchema, PgSchemaOptions } from './schema';
 
 export async function getSchema(
 	config: ClientConfig,
-	options: PgOptions = { name: 'public' },
+	options: PgSchemaOptions = { name: 'public' },
 ) {
 	const rawSchema = await queryPgSchema(config, options.name);
-	const schema = new PgSchema(rawSchema);
+	const schema = new PgSchema(rawSchema, options.skip);
 
 	return schema;
 }

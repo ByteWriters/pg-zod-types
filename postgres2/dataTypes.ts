@@ -4,7 +4,7 @@ import { CustomTypeName, EnumName } from './types';
 
 export interface PgTypeJson {
 	name: string
-	type: 'native' | 'enum' | 'custom'
+	variant: 'builtin' | 'enum' | 'custom'
 	values?: string[]
 	fields?: ReturnType<PgField['toJson']>[]
 };
@@ -22,7 +22,7 @@ export class PgType {
 	toJson(): PgTypeJson {
 		return {
 			name: this.name,
-			type: 'native',
+			variant: 'builtin',
 		}
 	}
 }
@@ -43,7 +43,7 @@ export class PgEnum extends PgType {
 	toJson(): PgTypeJson {
 		return {
 			name: this.name,
-			type: 'enum',
+			variant: 'enum',
 			values: this.values,
 		}
 	}
@@ -66,7 +66,7 @@ export class PgCustomType extends PgType {
 	toJson(): PgTypeJson {
 		return {
 			name: this.name,
-			type: 'custom',
+			variant: 'custom',
 			fields: this.fields.map(entry => entry.toJson())
 		}
 	}
@@ -82,24 +82,16 @@ export class PgField {
 	array: boolean = false
 	nullable: boolean = false
 
-	private raw: RawPgSchema['types'][number]['fields'][number];
-
 	constructor(raw: RawPgSchema['types'][number]['fields'][number], schema: PgSchema) {
 		this.name = raw.name;
 		this.schema = schema;
-		this.raw = raw;
 
 		this.array = raw.data_type === 'ARRAY';
 		this.nullable = raw.is_nullable === 'YES';
 
-		this.type = this.getType();
-	}
-
-	private getType() {
-		const lookupName = this.array ? this.raw.pg_type.slice(1)
-			: this.raw.pg_type;
-
-		return this.schema.lookupType(lookupName);
+		// unfortunate exception handled poorly xD - function args don't have the '_' at the start, but custom type fields do
+		const pg_type = (this.array && raw.pg_type.charAt(0) === '_') ? raw.pg_type.slice(1) : raw.pg_type;
+		this.type = this.schema.lookupType(pg_type);
 	}
 
 	toJson() {

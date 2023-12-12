@@ -1,6 +1,7 @@
 import { RawPgSchema } from './queries';
-import { ColumnName, TableName } from './types';
+import { ColumnName, CustomTypeName, EnumName, FunctionName, SchemaName, TableName } from './types';
 import { PgCustomType, PgEnum, PgField, PgType, PgTypeJson } from './dataTypes';
+import { filterAndMap } from './util';
 
 interface PgColumnJson {
 	name: ColumnName
@@ -74,11 +75,63 @@ class PgTable {
 		this.columns = columns;
 	}
 
+	toJson(skipColumns: ColumnName[] = []) {
+		return {
+			name: this.name as TableName,
+			columns: filterAndMap(this.columns, entry => entry.toJson(), skipColumns)
+		};
+	}
+}
+
+class PgFunction {
+	name: string
+	protected schema: PgSchema
+	arguments: PgField[]
+	returnType: PgField
+
+	constructor(raw: RawPgSchema['functions'][number], schema: PgSchema) {
+		this.name = raw.name;
+		this.schema = schema;
+
+		const argParts = raw.args.split(', ');
+		this.arguments = argParts.map((argStr, index) => {
+			const [ name, arg_type ] = argStr.split(' ');
+			const is_array = arg_type.endsWith('[]');
+
+			return new PgField({
+				name,
+				pg_type: is_array ? arg_type.slice(0, -2) : arg_type,
+				data_type: is_array ? 'ARRAY' : arg_type,
+				is_nullable: 'NO',
+				index: index + 1,
+			}, schema);
+		});
+
+		const return_is_array = raw.return_type.endsWith('[]');
+		this.returnType = new PgField({
+			name: `${this.name}_return`,
+			data_type: return_is_array ? 'ARRAY' : raw.return_type,
+			is_nullable: 'YES',
+			pg_type: return_is_array ? raw.return_type.slice(0, -2) : raw.return_type
+		}, schema);
+	}
+
 	toJson() {
 		return {
 			name: this.name,
-			columns: this.columns.map(entry => entry.toJson())
-		};
+			arguments: this.arguments.map(entry => entry.toJson()),
+			returnType: this.returnType.toJson(),
+		}
+	}
+}
+
+export interface PgSchemaOptions {
+	name: SchemaName
+	skip?: {
+		columns?: Record<TableName, ColumnName[]>
+		functions?: FunctionName[]
+		tables?: TableName[]
+		types?: (CustomTypeName | EnumName)[]
 	}
 }
 
@@ -86,22 +139,31 @@ export class PgSchema {
 	private raw: RawPgSchema
 
 	name: string;
+	skip: PgSchemaOptions['skip'];
+
+	functions: PgFunction[] = [];
 	types: PgType[] = [];
 	tables: PgTable[] = [];
+	pkeys: PgPrimaryColumn[] = [];
 
-	constructor(rawPgSchema: RawPgSchema) {
+	constructor(rawPgSchema: RawPgSchema, skip?: PgSchemaOptions['skip']) {
 		this.raw = rawPgSchema;
 		this.name = rawPgSchema.name;
+		this.skip = skip;
 
 		// Fill members in order of dependency
 		this.types = this.raw.enums.map(entry => new PgEnum(entry, this));
 		this.types.push(...this.raw.types.map(entry => new PgCustomType(entry, this)));
 
-		this.tables = this.raw.tableNames.map(table_name => {
+		this.functions = this.raw.functions.map(entry => new PgFunction(entry, this));
+
+		this.tables = this.raw.tableNames.map(({ name: table_name }) => {
+			// Construct table so it can be passed to columns
 			const table = new PgTable(table_name, this);
 
 			const rawColumns = this.raw.columns.filter(col => col.table_name === table_name);
 			const columns = rawColumns.map(col => {
+				// fetch pkey/fkey-info from postgres query-result / use to construct derived column classees
 				const keyInfo = this.raw.pkeysFkeys.find(
 					entry => entry.table_name === table_name && entry.column_name === col.name
 				);
@@ -109,7 +171,9 @@ export class PgSchema {
 				if (!keyInfo) return new PgColumn(col, this, table);
 
 				if (keyInfo.constraint_type === 'PRIMARY KEY') {
-					return new PgPrimaryColumn(col, this, table);
+					const pkeyColumn = new PgPrimaryColumn(col, this, table);
+					this.pkeys.push(pkeyColumn);
+					return pkeyColumn;
 				}
 
 				if (keyInfo.constraint_type === 'FOREIGN KEY') {
@@ -117,6 +181,7 @@ export class PgSchema {
 				}
 			});
 
+			// Set columns on table (want references to each other in both)
 			table.setColumns(columns);
 			return table;
 		});
@@ -158,9 +223,11 @@ export class PgSchema {
 
 	toJson() {
 		return {
-			name: this.name,
-			types: this.types.map(entry => entry.toJson()),
-			tables: this.tables.map(entry => entry.toJson()),
+			name: this.name as SchemaName,
+			types: filterAndMap(this.types, entry => entry.toJson(), this.skip?.types),
+			functions: filterAndMap(this.functions, entry => entry.toJson(), this.skip?.functions),
+			tables: filterAndMap(this.tables, entry => entry.toJson((this.skip?.columns || {})[entry.name]), this.skip?.tables),
+			pkeys: this.pkeys.map(entry => ({ table_name: entry.table.name, ...entry.toJson() })),
 		}
 	}
 }

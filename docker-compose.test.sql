@@ -76,3 +76,9 @@ create function f_user_authorize(
     auth.valid_from < now() and
     (auth.valid_until is null or auth.valid_until > now());
 $$ language sql security definer;
+
+create function f_edge_cases(
+	"user_ids" uuid[], "roles" role_type[], "auths" user_auth_type[]
+) returns user_auth_type[] as $$ begin
+	return $3;
+end $$ language plpgsql;
