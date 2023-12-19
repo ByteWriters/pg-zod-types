@@ -1,6 +1,7 @@
 import { RawPgSchema } from './queries';
 import { PgSchema } from './schema';
 import { CustomTypeName, EnumName } from './types';
+import { pascalize, pgTypeMap, pgZodMap } from './util';
 
 export interface PgTypeJson {
 	name: string
@@ -25,17 +26,47 @@ export class PgType {
 			variant: 'builtin',
 		}
 	}
+
+	toType(): string {
+		const [ _, mappedType ] = Object.entries(pgTypeMap).find(
+			([ key ]) => this.name.indexOf(key) === 0
+		) || [];
+
+		if (!mappedType) throw new Error(`No mapping found for native type "${this.name}"`);
+
+		return mappedType;
+	}
+
+	toZodExport(): string {
+		throw new Error(`Native postgres-type "${this.name}" has no top-level export`);
+	}
+
+	toZod(): string {
+		const [ _, mappedType ] = Object.entries(pgZodMap).find(
+			([ key ]) => this.name.indexOf(key) === 0
+		) || [];
+
+		if (!mappedType) throw new Error(`No mapping found for native type "${this.name}"`);
+
+		return mappedType;
+	}
 }
 
 // enum class -> custom defined enum
 export class PgEnum extends PgType {
 	name: EnumName
+	getExportName: (_this: PgEnum) => string
 
 	values: string[]
 
-	constructor(raw: RawPgSchema['enums'][number], schema: PgSchema) {
+	constructor(
+		raw: RawPgSchema['enums'][number],
+		schema: PgSchema,
+		getName: PgEnum['getExportName'] = _this => pascalize(this.name)
+	) {
 		super(raw.name, schema);
 
+		this.getExportName = getName;
 		this.schema = schema;
 		this.values = raw.values.split(';');
 	}
@@ -47,18 +78,37 @@ export class PgEnum extends PgType {
 			values: this.values,
 		}
 	}
+
+	toType() {
+		const enumValues = this.values.map(v => `\t${v} = '${v}',`).join('\n');
+		return `export enum ${this.getExportName(this)} {\n${enumValues}\n};`
+	}
+
+	// top-level export to be referenced by toZod
+	// enum happens to be compatible for both TS and zod
+	toZodExport() {
+		return this.toType();
+	}
+
+	toZod() {
+		return `z.nativeEnum(${this.getExportName(this)})`;
+	}
 }
 
 // custom type class -> fully custom defined type
 export class PgCustomType extends PgType {
 	name: CustomTypeName
+	getExportName: (_this: PgCustomType) => string
+
 	fields: PgField[]
 
 	constructor(
 		raw: RawPgSchema['types'][number],
 		schema: PgSchema,
+		getName: PgCustomType['getExportName'] = _this => pascalize(this.name)
 	) {
 		super(raw.name, schema);
+		this.getExportName = getName;
 
 		this.fields = raw.fields.map(field => new PgField(field, schema));
 	}
@@ -69,6 +119,16 @@ export class PgCustomType extends PgType {
 			variant: 'custom',
 			fields: this.fields.map(entry => entry.toJson())
 		}
+	}
+
+	// top-level export to be referenced by toZod
+	toZodExport() {
+		const fields = this.fields.map(field => `${field.toZod()}`).join('\n');
+		return `export const ${this.getExportName(this)} = z.object({\n${fields}\n});`
+	}
+
+	toZod() {
+		return this.getExportName(this);
 	}
 }
 
@@ -102,5 +162,14 @@ export class PgField {
 			array: this.array,
 			nullable: this.nullable,
 		}
+	}
+
+	toZod(required: boolean = false) {
+		const withArray = (type: string) => this.array ? `z.array(${type})` : type;
+		let zod = withArray(this.type.toZod());
+		if (this.nullable) zod += '.nullable()';
+		if (!required) zod += '.optional()';
+
+		return `\t${this.name}: ${zod},`;
 	}
 }

@@ -13,8 +13,10 @@ const config: ClientConfig = {
 (async () => {
 	const schema = await getSchema(config);
 	const json = schema.toJson();
+	const zod = schema.toZod();
 
 	writeFileSync(resolve(__dirname, 'test', 'output.json'), JSON.stringify(json, null, '\t'));
+	writeFileSync(resolve(__dirname, 'test', 'output.ts'), zod);
 
 	console.log('done.');
 })();

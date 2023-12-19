@@ -1,7 +1,7 @@
 import { RawPgSchema } from './queries';
 import { ColumnName, CustomTypeName, EnumName, FunctionName, SchemaName, TableName } from './types';
 import { PgCustomType, PgEnum, PgField, PgType, PgTypeJson } from './dataTypes';
-import { filterAndMap } from './util';
+import { filterAndMap, pascalize } from './util';
 
 interface PgColumnJson {
 	name: ColumnName
@@ -26,6 +26,11 @@ class PgColumn extends PgField {
 	toJson(): PgColumnJson {
 		return { ...super.toJson(), key_type: 'none' };
 	}
+
+	toZod(optional = false) {
+		const required = optional ? false : !this.default;
+		return super.toZod(required);
+	}
 }
 
 class PgPrimaryColumn extends PgColumn {
@@ -35,6 +40,10 @@ class PgPrimaryColumn extends PgColumn {
 
 	toJson(): PgColumnJson {
 		return { ...super.toJson(), key_type: 'primary' };
+	}
+
+	toType() {
+		return `\t${this.name}: string & { _${this.table.name}: any },`;
 	}
 }
 
@@ -47,6 +56,10 @@ class PgForeignColumn extends PgColumn {
 
 	setReferences(rawKey: RawPgSchema['pkeysFkeys'][number]) {
 		this.references = this.schema.lookupColumn(rawKey.f_table_name, rawKey.f_column_name);
+	}
+
+	toType() {
+		return `\t${this.name}: string & { _${this.references.table.name}: any },`;
 	}
 
 	toJson(): PgColumnJson {
@@ -81,6 +94,11 @@ class PgTable {
 			columns: filterAndMap(this.columns, entry => entry.toJson(), skipColumns)
 		};
 	}
+
+	toZod() {
+		const columns = this.columns.map(column => column.toZod()).join('\n');
+		return `export const zod${pascalize(this.name)} = z.object({\n${columns}\n});`;
+	}
 }
 
 class PgFunction {
@@ -109,7 +127,7 @@ class PgFunction {
 
 		const return_is_array = raw.return_type.endsWith('[]');
 		this.returnType = new PgField({
-			name: `${this.name}_return`,
+			name: `returns`,
 			data_type: return_is_array ? 'ARRAY' : raw.return_type,
 			is_nullable: 'YES',
 			pg_type: return_is_array ? raw.return_type.slice(0, -2) : raw.return_type
@@ -122,6 +140,11 @@ class PgFunction {
 			arguments: this.arguments.map(entry => entry.toJson()),
 			returnType: this.returnType.toJson(),
 		}
+	}
+
+	toZod() {
+		const args = this.arguments.map(a => `\t${a.toZod(true)}`).join('\n');
+		return `export const ${this.name} = {\n\targuments: {\n${args}\n\t},\n${this.returnType.toZod(true)}\n};`
 	}
 }
 
@@ -229,5 +252,29 @@ export class PgSchema {
 			tables: filterAndMap(this.tables, entry => entry.toJson((this.skip?.columns || {})[entry.name]), this.skip?.tables),
 			pkeys: this.pkeys.map(entry => ({ table_name: entry.table.name, ...entry.toJson() })),
 		}
+	}
+
+	toZod() {
+		// @TODO overrides (only for columns?)
+		const enumZodExports = this.types.filter(t => t instanceof PgEnum).map(e => e.toZodExport()).join('\n\n');
+		const customTypeZodExports = this.types.filter(t => t instanceof PgCustomType).map(c => c.toZodExport()).join('\n\n');
+		const tables = this.tables.map(t => t.toZod()).join('\n\n');
+		const functions = this.functions.map(f => f.toZod()).join('\n\n');
+
+		return `/** THIS FILE IS AUTO-GENERATED! Don't edit manually :)*/
+
+import z from 'zod';
+
+/** User-defined enums */
+${enumZodExports}
+
+/** User-defined custom postgres types */
+${customTypeZodExports}
+
+/** User-defined functions */
+${functions}
+
+/** Tables */
+${tables}`;
 	}
 }
