@@ -1,8 +1,8 @@
 import { ClientConfig } from 'pg';
 
 import { getSchema } from './postgres2';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const config: ClientConfig = {
 	host: process.env.POSTGRES_HOST || 'localhost',

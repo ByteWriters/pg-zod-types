@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { writeFileSync } from 'node:fs';
 import { ClientConfig } from 'pg';
 
 import { builders } from './builders';
